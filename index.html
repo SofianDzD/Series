@@ -38,7 +38,6 @@
     allowfullscreen webkitallowfullscreen mozallowfullscreen
     allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
     referrerpolicy="no-referrer"
-    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock"
   ></iframe>
 
   <script>
@@ -53,9 +52,11 @@
       tg.BackButton?.hide?.();
     }
 
-    // ── منع فتح نوافذ جديدة (الإعلانات) ─────────────────
+    // ── منع الإعلانات بدون sandbox ───────────────────────
+    // نحجب window.open في الصفحة الرئيسية
     window.open = () => null;
 
+    // نمنع أي رابط يحاول فتح نافذة جديدة
     document.addEventListener('click', (e) => {
       const a = e.target.closest('a');
       if (a && (a.target === '_blank' || a.target === '_top')) {
@@ -73,21 +74,8 @@
       frame.src = iframeSrc;
       frame.addEventListener('load', () => {
         loading.style.display = 'none';
-        try {
-          frame.contentWindow.open = () => null;
-          frame.contentDocument.addEventListener('click', (e) => {
-            const a = e.target.closest('a');
-            if (!a) return;
-            try {
-              const url = new URL(a.href);
-              const src = new URL(iframeSrc);
-              if (url.hostname !== src.hostname) {
-                e.preventDefault();
-                e.stopPropagation();
-              }
-            } catch { e.preventDefault(); }
-          }, true);
-        } catch (err) {}
+        // محاولة حجب window.open داخل الـ iframe
+        try { frame.contentWindow.open = () => null; } catch (e) {}
       }, { once: true });
       setTimeout(() => { loading.style.display = 'none'; }, 5000);
     } else {
