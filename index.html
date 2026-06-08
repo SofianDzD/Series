@@ -11,14 +11,9 @@
     html, body {
       background: #000;
       width: 100%; height: 100%;
+      /* بدون padding حتى لا تظهر أشرطة سوداء */
       overflow: hidden;
-      /* ملء كامل بما فيه منطقة الـ notch */
-      padding: env(safe-area-inset-top) env(safe-area-inset-right)
-               env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
-
-    /* إخفاء شريط تيليجرام العلوي عبر CSS */
-    .tg-header, [data-telegram-header] { display: none !important; }
 
     #loading {
       position: fixed; inset: 0; background: #000;
@@ -35,30 +30,39 @@
     #loading p { font-size: 14px; color: #aaa; }
 
     iframe {
-      position: fixed; inset: 0;
-      width: 100vw; height: 100vh;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       border: none; z-index: 5;
     }
 
     /* زر ملء الشاشة */
     #fs-btn {
       position: fixed;
-      bottom: 70px; right: 14px;
+      bottom: 24px; right: 14px;
       width: 46px; height: 46px;
-      background: rgba(0,0,0,0.7);
-      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.75);
+      border: 1px solid rgba(255,255,255,0.25);
       border-radius: 10px;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       z-index: 30;
+      -webkit-tap-highlight-color: transparent;
     }
     #fs-btn svg { width: 24px; height: 24px; fill: #fff; }
   </style>
 </head>
 <body>
   <div id="loading"><div class="spinner"></div><p>⏳ جارٍ تحميل المسلسل...</p></div>
-  <iframe id="tv-frame" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
-  <button id="fs-btn">
+  <iframe
+    id="tv-frame"
+    allowfullscreen
+    webkitallowfullscreen
+    mozallowfullscreen
+    allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
+    referrerpolicy="no-referrer"
+  ></iframe>
+  <button id="fs-btn" title="ملء الشاشة">
     <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
   </button>
 
@@ -70,16 +74,9 @@
       tg.expand();
       tg.setHeaderColor?.('#000000');
       tg.setBackgroundColor?.('#000000');
-      // إخفاء الهيدر والشريط العلوي
       tg.headerColor = '#000000';
-      if (tg.isVersionAtLeast?.('6.1')) {
-        tg.setHeaderColor('#000000');
-      }
-      // تفعيل وضع ملء الشاشة الكامل (Telegram Bot API 8.0+)
-      if (tg.requestFullscreen) {
-        tg.requestFullscreen();
-      }
-      // إخفاء زر الرجوع إذا كان ظاهراً
+      if (tg.isVersionAtLeast?.('6.1')) tg.setHeaderColor('#000000');
+      if (tg.requestFullscreen) tg.requestFullscreen();
       tg.BackButton?.hide?.();
     }
 
@@ -89,34 +86,62 @@
     const frame     = document.getElementById('tv-frame');
     const fsBtn     = document.getElementById('fs-btn');
 
-    // ── Fullscreen ──────────────────────────────────────────
-    fsBtn.addEventListener('click', () => {
-      // الأولوية: Telegram API (يخفي الشريط العلوي كاملاً)
-      if (tg?.requestFullscreen) {
-        tg.requestFullscreen();
+    // ── Fullscreen — يدخل الـ iframe نفسه في fullscreen ──
+    function enterFullscreen() {
+      // 1) الـ iframe كاملاً (يخفي كل شيء)
+      const el = frame;
+      const req = el.requestFullscreen
+               || el.webkitRequestFullscreen
+               || el.mozRequestFullScreen
+               || el.msRequestFullscreen;
+      if (req) {
+        req.call(el).catch(() => {
+          // fallback: fullscreen على document كامل
+          const d = document.documentElement;
+          const dr = d.requestFullscreen || d.webkitRequestFullscreen;
+          if (dr) dr.call(d);
+        });
         return;
       }
-      // Android / باقي المتصفحات
-      const el = document.documentElement;
-      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
-      if (req) req.call(el);
+      // 2) Telegram API كـ fallback
+      if (tg?.requestFullscreen) { tg.requestFullscreen(); return; }
+      // 3) document كامل
+      const d = document.documentElement;
+      const dr = d.requestFullscreen || d.webkitRequestFullscreen;
+      if (dr) dr.call(d);
+    }
+
+    function exitFullscreen() {
+      const ex = document.exitFullscreen
+              || document.webkitExitFullscreen
+              || document.mozCancelFullScreen;
+      if (ex) ex.call(document);
+    }
+
+    fsBtn.addEventListener('click', () => {
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      isFs ? exitFullscreen() : enterFullscreen();
     });
 
-    // تحديث أيقونة الزر عند الدخول/الخروج من fullscreen
-    document.addEventListener('fullscreenchange', updateFsIcon);
-    document.addEventListener('webkitfullscreenchange', updateFsIcon);
+    // تحديث الأيقونة عند تغيّر حالة fullscreen
     function updateFsIcon() {
       const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
       fsBtn.innerHTML = isFs
         ? `<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>`
         : `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
     }
+    document.addEventListener('fullscreenchange', updateFsIcon);
+    document.addEventListener('webkitfullscreenchange', updateFsIcon);
 
     // ── تحميل الـ iframe ──────────────────────────────────
     if (iframeSrc) {
       frame.src = iframeSrc;
-      frame.addEventListener('load', () => { loading.style.display = 'none'; }, { once: true });
-      setTimeout(() => { loading.style.display = 'none'; }, 4000);
+      frame.addEventListener('load', () => {
+        loading.style.display = 'none';
+        // نحاول دخول fullscreen تلقائياً بعد التحميل
+        setTimeout(() => { enterFullscreen(); }, 800);
+      }, { once: true });
+      setTimeout(() => { loading.style.display = 'none'; }, 5000);
     } else {
       loading.innerHTML = '<p style="color:#ff6b6b">❌ رابط غير صحيح</p>';
     }
