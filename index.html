@@ -28,19 +28,6 @@
       width: 100%; height: 100%;
       border: none; z-index: 5;
     }
-
-    /* زر fullscreen */
-    #fs-btn {
-      position: fixed; bottom: 24px; right: 14px;
-      width: 46px; height: 46px;
-      background: rgba(0,0,0,0.75);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 10px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      z-index: 30;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #fs-btn svg { width: 24px; height: 24px; fill: #fff; }
   </style>
 </head>
 <body>
@@ -53,10 +40,6 @@
     referrerpolicy="no-referrer"
     sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock"
   ></iframe>
-
-  <button id="fs-btn" title="ملء الشاشة">
-    <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-  </button>
 
   <script>
     const tg = window.Telegram?.WebApp;
@@ -73,7 +56,6 @@
     // ── منع فتح نوافذ جديدة (الإعلانات) ─────────────────
     window.open = () => null;
 
-    // منع روابط _blank في الصفحة الرئيسية
     document.addEventListener('click', (e) => {
       const a = e.target.closest('a');
       if (a && (a.target === '_blank' || a.target === '_top')) {
@@ -86,66 +68,27 @@
     const iframeSrc = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
     const loading   = document.getElementById('loading');
     const frame     = document.getElementById('tv-frame');
-    const fsBtn     = document.getElementById('fs-btn');
 
-    // ── Fullscreen ────────────────────────────────────────
-    function enterFullscreen() {
-      const req = frame.requestFullscreen || frame.webkitRequestFullscreen
-               || frame.mozRequestFullScreen || frame.msRequestFullscreen;
-      if (req) { req.call(frame).catch(() => {}); return; }
-      if (tg?.requestFullscreen) { tg.requestFullscreen(); return; }
-      const d = document.documentElement;
-      (d.requestFullscreen || d.webkitRequestFullscreen)?.call(d);
-    }
-
-    function exitFullscreen() {
-      (document.exitFullscreen || document.webkitExitFullscreen
-       || document.mozCancelFullScreen)?.call(document);
-    }
-
-    fsBtn.addEventListener('click', () => {
-      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-      isFs ? exitFullscreen() : enterFullscreen();
-    });
-
-    document.addEventListener('fullscreenchange', updateFsIcon);
-    document.addEventListener('webkitfullscreenchange', updateFsIcon);
-    function updateFsIcon() {
-      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-      fsBtn.innerHTML = isFs
-        ? '<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>'
-        : '<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
-    }
-
-    // ── تحميل الـ iframe ──────────────────────────────────
     if (iframeSrc) {
       frame.src = iframeSrc;
       frame.addEventListener('load', () => {
         loading.style.display = 'none';
-
-        // محاولة منع window.open داخل الـ iframe
         try {
           frame.contentWindow.open = () => null;
-          // منع روابط خارجية داخل الـ iframe
           frame.contentDocument.addEventListener('click', (e) => {
             const a = e.target.closest('a');
             if (!a) return;
             try {
-              const url  = new URL(a.href);
-              const src  = new URL(iframeSrc);
+              const url = new URL(a.href);
+              const src = new URL(iframeSrc);
               if (url.hostname !== src.hostname) {
                 e.preventDefault();
                 e.stopPropagation();
               }
             } catch { e.preventDefault(); }
           }, true);
-        } catch (err) {
-          // cross-origin — sandbox يتكفل بمنع window.open
-        }
-
-        setTimeout(() => { enterFullscreen(); }, 800);
+        } catch (err) {}
       }, { once: true });
-
       setTimeout(() => { loading.style.display = 'none'; }, 5000);
     } else {
       loading.innerHTML = '<p style="color:#ff6b6b">❌ رابط غير صحيح</p>';
