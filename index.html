@@ -35,7 +35,9 @@
 
   <iframe
     id="tv-frame"
-    allowfullscreen webkitallowfullscreen mozallowfullscreen
+    allowfullscreen
+    webkitallowfullscreen
+    mozallowfullscreen
     allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
     referrerpolicy="no-referrer"
   ></iframe>
@@ -52,19 +54,6 @@
       tg.BackButton?.hide?.();
     }
 
-    // ── منع الإعلانات بدون sandbox ───────────────────────
-    // نحجب window.open في الصفحة الرئيسية
-    window.open = () => null;
-
-    // نمنع أي رابط يحاول فتح نافذة جديدة
-    document.addEventListener('click', (e) => {
-      const a = e.target.closest('a');
-      if (a && (a.target === '_blank' || a.target === '_top')) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }, true);
-
     const params    = new URLSearchParams(location.search);
     const iframeSrc = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
     const loading   = document.getElementById('loading');
@@ -74,8 +63,6 @@
       frame.src = iframeSrc;
       frame.addEventListener('load', () => {
         loading.style.display = 'none';
-        // محاولة حجب window.open داخل الـ iframe
-        try { frame.contentWindow.open = () => null; } catch (e) {}
       }, { once: true });
       setTimeout(() => { loading.style.display = 'none'; }, 5000);
     } else {
