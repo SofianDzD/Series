@@ -9,6 +9,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: #000; width: 100%; height: 100%; overflow: hidden; }
 
+    /* ── Loading ─────────────────────────────────────────────────── */
     #loading {
       position: fixed; inset: 0; background: #000;
       display: flex; flex-direction: column;
@@ -23,17 +24,61 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading p { font-size: 14px; color: #aaa; }
 
-    #next-toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: rgba(229,80,0,0.95); color: #fff;
-      padding: 10px 22px; border-radius: 24px;
-      font-size: 14px; z-index: 100;
+    /* ── Toast ───────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: rgba(20,20,20,0.92); color: #fff;
+      padding: 9px 20px; border-radius: 20px;
+      font-size: 13px; z-index: 200;
       opacity: 0; pointer-events: none;
       transition: opacity 0.3s;
       white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.1);
     }
-    #next-toast.show { opacity: 1; }
+    #toast.show { opacity: 1; }
 
+    /* ── Controls bar ────────────────────────────────────────────── */
+    #controls {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+      z-index: 100;
+      transition: opacity 0.4s;
+    }
+    #controls.hidden { opacity: 0; pointer-events: none; }
+
+    #ep-info {
+      color: #fff; font-size: 13px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    #btn-next {
+      display: flex; align-items: center; gap: 6px;
+      background: #e55000; color: #fff;
+      border: none; border-radius: 22px;
+      padding: 9px 18px; font-size: 14px; font-weight: 600;
+      cursor: pointer; direction: rtl;
+      box-shadow: 0 2px 12px rgba(229,80,0,0.5);
+      transition: transform 0.15s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-next:active { transform: scale(0.95); background: #c44400; }
+
+    #btn-toggle {
+      background: rgba(255,255,255,0.12); color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50%; width: 34px; height: 34px;
+      font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-toggle:active { background: rgba(255,255,255,0.25); }
+
+    /* ── iframe ──────────────────────────────────────────────────── */
     iframe {
       position: fixed; top: 0; left: 0;
       width: 100%; height: 100%;
@@ -42,28 +87,33 @@
   </style>
 </head>
 <body>
+
   <div id="loading">
     <div class="spinner"></div>
     <p id="loading-text">⏳ جارٍ تحميل المسلسل...</p>
   </div>
 
-  <div id="next-toast">⏭ جارٍ الانتقال للحلقة التالية...</div>
+  <div id="toast"></div>
+
+  <!-- شريط التحكم السفلي -->
+  <div id="controls">
+    <button id="btn-toggle" title="إخفاء/إظهار">👁</button>
+    <span id="ep-info">الحلقة —</span>
+    <button id="btn-next">الحلقة التالية ⏭</button>
+  </div>
 
   <iframe
     id="tv-frame"
-    allowfullscreen
-    webkitallowfullscreen
-    mozallowfullscreen
+    allowfullscreen webkitallowfullscreen mozallowfullscreen
     allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
     referrerpolicy="no-referrer"
   ></iframe>
 
   <script>
-    // ─── Telegram WebApp Init ─────────────────────────────────────
+    // ── Telegram init ──────────────────────────────────────────────
     const tg = window.Telegram?.WebApp;
     if (tg) {
-      tg.ready();
-      tg.expand();
+      tg.ready(); tg.expand();
       tg.setHeaderColor?.('#000000');
       tg.setBackgroundColor?.('#000000');
       if (tg.isVersionAtLeast?.('6.1')) tg.setHeaderColor('#000000');
@@ -71,177 +121,166 @@
       tg.BackButton?.hide?.();
     }
 
-    // ─── Parse URL params ─────────────────────────────────────────
-    const params  = new URLSearchParams(location.search);
-    const rawSrc  = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
+    // ── Params ────────────────────────────────────────────────────
+    const params = new URLSearchParams(location.search);
+    const rawSrc = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
 
-    const loading     = document.getElementById('loading');
-    const loadingText = document.getElementById('loading-text');
-    const frame       = document.getElementById('tv-frame');
-    const toast       = document.getElementById('next-toast');
+    const $loading     = document.getElementById('loading');
+    const $loadingText = document.getElementById('loading-text');
+    const $frame       = document.getElementById('tv-frame');
+    const $toast       = document.getElementById('toast');
+    const $controls    = document.getElementById('controls');
+    const $epInfo      = document.getElementById('ep-info');
+    const $btnNext     = document.getElementById('btn-next');
+    const $btnToggle   = document.getElementById('btn-toggle');
 
     if (!rawSrc) {
-      loading.innerHTML = '<p style="color:#ff6b6b">❌ رابط غير صحيح</p>';
-      throw new Error('No iframe src');
+      $loading.innerHTML = '<p style="color:#ff6b6b">❌ رابط غير صحيح</p>';
+      throw new Error('No src');
     }
 
-    // ─── State ────────────────────────────────────────────────────
+    // ── State ─────────────────────────────────────────────────────
     let currentSrc    = rawSrc;
-    let currentSeason = null;
-    let currentEp     = null;
-    let totalEpisodes = null;   // يُحدَّث من tmdb إن أمكن
-    let imdbId        = null;
+    let currentSeason = 1;
+    let currentEp     = 1;
+    let totalEpisodes = null;
     let tmdbId        = null;
-    let isVidlink     = false;
+    let imdbId        = null;
+    let isVidlink     = rawSrc.includes('vidlink.pro');
+    let controlsVisible = true;
+    let hideTimer     = null;
 
-    // ─── Parse current episode info from URL ─────────────────────
-    function parseEpisodeFromUrl(url) {
-      // vsembed: ?imdb=tt...&season=1&episode=2
-      const vsMatch = url.match(/[?&]season=(\d+)&episode=(\d+)/);
-      // vidlink: /tv/TMDB/1/2
-      const vlMatch = url.match(/\/tv\/(\d+)\/(\d+)\/(\d+)/);
-      if (vsMatch)  return { season: +vsMatch[1], episode: +vsMatch[2] };
-      if (vlMatch)  return { season: +vlMatch[2], episode: +vlMatch[3] };
+    // ── Helpers ───────────────────────────────────────────────────
+    function parseEp(url) {
+      const vs = url.match(/[?&]season=(\d+)[&]episode=(\d+)/);
+      const vl = url.match(/\/tv\/\d+\/(\d+)\/(\d+)/);
+      if (vs) return { season: +vs[1], episode: +vs[2] };
+      if (vl) return { season: +vl[1], episode: +vl[2] };
       return null;
     }
 
-    function extractIds(url) {
-      const imdb = url.match(/imdb=(tt\d+)/)?.[1] || null;
-      const tmdb = url.match(/\/tv\/(\d+)\//)?.[1] || null;
-      return { imdb, tmdb };
-    }
-
-    // ─── Build next-episode URL ───────────────────────────────────
-    function buildNextUrl(url, nextSeason, nextEp) {
+    function buildNext(url, s, e) {
       if (isVidlink) {
-        // vidlink: /tv/TMDB/season/episode
-        return url.replace(/\/tv\/\d+\/\d+\/\d+/, `/tv/${tmdbId}/${nextSeason}/${nextEp}`);
+        return url.replace(/\/tv\/(\d+)\/\d+\/\d+/, `/tv/$1/${s}/${e}`);
+      }
+      return url
+        .replace(/season=\d+/, `season=${s}`)
+        .replace(/episode=\d+/, `episode=${e}`);
+    }
+
+    function updateEpInfo() {
+      $epInfo.textContent = `م${currentSeason} — ح${currentEp}`;
+    }
+
+    function showToast(msg, ms = 2800) {
+      $toast.textContent = msg;
+      $toast.classList.add('show');
+      setTimeout(() => $toast.classList.remove('show'), ms);
+    }
+
+    function loadFrame(url, label = '') {
+      $loading.style.display = 'flex';
+      $loadingText.textContent = label || '⏳ جارٍ التحميل...';
+      $frame.src = url;
+      scheduleHide();
+    }
+
+    // ── Controls visibility ───────────────────────────────────────
+    function showControls() {
+      $controls.classList.remove('hidden');
+      controlsVisible = true;
+      scheduleHide();
+    }
+
+    function scheduleHide() {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        $controls.classList.add('hidden');
+        controlsVisible = false;
+      }, 4000);
+    }
+
+    // النقر على الشاشة يُظهر/يُخفي الأزرار
+    document.addEventListener('click', (e) => {
+      if (e.target === $btnNext || e.target === $btnToggle) return;
+      if (!controlsVisible) showControls();
+    });
+
+    $btnToggle.addEventListener('click', () => {
+      if (controlsVisible) {
+        clearTimeout(hideTimer);
+        $controls.classList.add('hidden');
+        controlsVisible = false;
       } else {
-        // vsembed: season=X&episode=Y
-        return url
-          .replace(/season=\d+/, `season=${nextSeason}`)
-          .replace(/episode=\d+/, `episode=${nextEp}`);
+        showControls();
       }
-    }
-
-    // ─── Navigate to next episode ─────────────────────────────────
-    function goNextEpisode() {
-      if (!currentSeason || !currentEp) return;
-
-      let nextSeason = currentSeason;
-      let nextEp     = currentEp + 1;
-
-      // إذا تجاوزنا عدد الحلقات المعروف → انتقل للموسم التالي
-      if (totalEpisodes && nextEp > totalEpisodes) {
-        nextSeason = currentSeason + 1;
-        nextEp     = 1;
-      }
-
-      const nextUrl = buildNextUrl(currentSrc, nextSeason, nextEp);
-      showToast(`⏭ الموسم ${nextSeason} — الحلقة ${nextEp}`);
-
-      setTimeout(() => {
-        currentSrc    = nextUrl;
-        currentSeason = nextSeason;
-        currentEp     = nextEp;
-        loadFrame(nextUrl);
-      }, 1200);
-    }
-
-    // ─── Show toast message ───────────────────────────────────────
-    function showToast(msg) {
-      toast.textContent = msg;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-
-    // ─── Load frame ───────────────────────────────────────────────
-    function loadFrame(url) {
-      loading.style.display = 'flex';
-      loadingText.textContent = '⏳ جارٍ تحميل الحلقة...';
-      frame.src = url;
-    }
-
-    // ─── Frame load event ─────────────────────────────────────────
-    frame.addEventListener('load', () => {
-      setTimeout(() => { loading.style.display = 'none'; }, 300);
     });
-    // Fallback timeout
-    setTimeout(() => { loading.style.display = 'none'; }, 5000);
 
-    // ─── Listen for postMessage from embed player ─────────────────
-    // vsembed و vidlink يُرسلان رسائل عند انتهاء الحلقة
-    window.addEventListener('message', (event) => {
-      const d = event.data;
+    // ── Next episode logic ────────────────────────────────────────
+    function goNext() {
+      let nextS = currentSeason;
+      let nextE = currentEp + 1;
+
+      // انتهت حلقات الموسم؟ → الموسم التالي
+      if (totalEpisodes && nextE > totalEpisodes) {
+        nextS = currentSeason + 1;
+        nextE = 1;
+        // جلب عدد حلقات الموسم الجديد
+        fetchSeasonEpisodes(nextS);
+      }
+
+      const nextUrl = buildNext(currentSrc, nextS, nextE);
+      showToast(`⏭  الموسم ${nextS} — الحلقة ${nextE}`);
+
+      currentSrc    = nextUrl;
+      currentSeason = nextS;
+      currentEp     = nextE;
+      updateEpInfo();
+      loadFrame(nextUrl, `⏳ الموسم ${nextS} — الحلقة ${nextE}`);
+    }
+
+    $btnNext.addEventListener('click', goNext);
+
+    // ── TMDB season info ──────────────────────────────────────────
+    function fetchSeasonEpisodes(season) {
+      if (!tmdbId) return;
+      fetch(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=279b30c513119c7c2420ced53dc59ae2`)
+        .then(r => r.json())
+        .then(d => { totalEpisodes = d?.episodes?.length || null; })
+        .catch(() => {});
+    }
+
+    // ── postMessage fallback (في حال اشتغل يوماً ما) ─────────────
+    window.addEventListener('message', (ev) => {
+      const d = ev.data;
       if (!d) return;
-
-      const str = typeof d === 'string' ? d.toLowerCase() : '';
-      const obj = typeof d === 'object' ? d : null;
-
-      // أنواع الرسائل المحتملة من مشغّلات مختلفة:
-      const isNextEvent =
-        str.includes('next')        ||
-        str.includes('autonext')    ||
-        str.includes('episode_end') ||
-        str.includes('ended')       ||
-        (obj && (
-          obj.type === 'NEXT_EPISODE'   ||
-          obj.type === 'next_episode'   ||
-          obj.event === 'next'          ||
-          obj.event === 'ended'         ||
-          obj.action === 'nextEpisode'  ||
-          obj.name === 'autonext'       ||
-          obj.key === 'autonext'
-        ));
-
-      if (isNextEvent) {
-        console.log('autonext event received:', d);
-        goNextEpisode();
-      }
+      const s   = typeof d === 'string' ? d.toLowerCase() : '';
+      const obj = typeof d === 'object' ? d : {};
+      const isNext =
+        s.includes('next') || s.includes('ended') ||
+        obj.type === 'NEXT_EPISODE' || obj.event === 'next' || obj.event === 'ended';
+      if (isNext) goNext();
     });
 
-    // ─── Intercept navigation attempts from iframe ────────────────
-    // بعض المشغّلات تحاول تغيير window.location بدلاً من postMessage
-    const origAssign   = window.location.assign.bind(window.location);
-    const origReplace  = window.location.replace.bind(window.location);
+    // ── Frame events ──────────────────────────────────────────────
+    $frame.addEventListener('load', () => {
+      setTimeout(() => { $loading.style.display = 'none'; }, 300);
+      showControls();
+    });
+    setTimeout(() => { $loading.style.display = 'none'; }, 6000);
 
-    function interceptNav(url) {
-      if (!url) return false;
-      // إذا الرابط يشير لحلقة تالية — افتحها في الـ iframe
-      if (url.includes('vsembed.su/embed/tv') || url.includes('vidlink.pro/tv')) {
-        loadFrame(url);
-        const ep = parseEpisodeFromUrl(url);
-        if (ep) { currentSeason = ep.season; currentEp = ep.episode; }
-        return true;
-      }
-      return false;
-    }
+    // ── Init ──────────────────────────────────────────────────────
+    imdbId   = rawSrc.match(/imdb=(tt\d+)/)?.[1]  || null;
+    tmdbId   = rawSrc.match(/\/tv\/(\d+)\//)?.[1] || null;
+    isVidlink = rawSrc.includes('vidlink.pro');
 
-    // ─── Init ─────────────────────────────────────────────────────
-    function init() {
-      const ids = extractIds(rawSrc);
-      imdbId    = ids.imdb;
-      tmdbId    = ids.tmdb;
-      isVidlink = rawSrc.includes('vidlink.pro');
+    const ep = parseEp(rawSrc);
+    if (ep) { currentSeason = ep.season; currentEp = ep.episode; }
 
-      const ep = parseEpisodeFromUrl(rawSrc);
-      if (ep) { currentSeason = ep.season; currentEp = ep.episode; }
-
-      // جلب عدد حلقات الموسم من TMDB لمعرفة متى ننتقل للموسم التالي
-      if (tmdbId && currentSeason) {
-        fetch(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${currentSeason}?api_key=279b30c513119c7c2420ced53dc59ae2`)
-          .then(r => r.json())
-          .then(data => {
-            totalEpisodes = data?.episodes?.length || null;
-            console.log(`Season ${currentSeason}: ${totalEpisodes} episodes`);
-          })
-          .catch(() => {});
-      }
-
-      loadFrame(rawSrc);
-    }
-
-    init();
+    updateEpInfo();
+    fetchSeasonEpisodes(currentSeason);
+    loadFrame(rawSrc);
+    scheduleHide();
   </script>
 </body>
 </html>
