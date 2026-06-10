@@ -2,25 +2,34 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>مشغّل المسلسلات</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>مشغّل المحتوى</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     html, body {
-      background: #000; width: 100%; height: 100%;
-      display: flex; flex-direction: column; overflow: hidden;
+      background: #000;
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
     }
 
-    /* iframe يأخذ كل المساحة */
+    /* ── iframe wrapper ── */
     #frame-wrap { flex: 1; position: relative; overflow: hidden; min-height: 0; }
-    iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+    iframe {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      border: none; z-index: 1;
+    }
 
-    /* Loading */
+    /* ── Loading ── */
     #loading {
       position: absolute; inset: 0; background: #000;
       display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 12px; z-index: 10;
+      align-items: center; justify-content: center;
+      gap: 12px; z-index: 10;
     }
     .spinner {
       width: 38px; height: 38px;
@@ -30,10 +39,12 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading p { font-size: 13px; color: #888; }
 
-    /* ── منطقة الزر — خارج iframe تماماً ── */
+    /* ══════════════════════════════════════
+       ── وضع المسلسلات: زر الحلقة التالية ──
+       ══════════════════════════════════════ */
     #btn-area {
       flex-shrink: 0;
-      height: 0;               /* مخفي = لا يأخذ مساحة */
+      height: 0;
       overflow: hidden;
       background: transparent;
       display: flex;
@@ -41,14 +52,10 @@
       justify-content: center;
       transition: height 0.45s cubic-bezier(0.16,1,0.3,1);
     }
-    #btn-area.show {
-      height: 68px;            /* يظهر بسلاسة */
-    }
+    #btn-area.show { height: 68px; }
 
-    /* الزر نفسه */
     #next-btn {
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
       background: rgba(229,80,0,0.95);
       color: #fff; border: none; border-radius: 50px;
       padding: 13px 32px;
@@ -62,20 +69,93 @@
     }
     #next-btn:active { transform: scale(0.95); }
 
-    /* شريط countdown داخل الزر */
     #cd-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
       height: 3px; background: rgba(255,255,255,0.4);
       transform-origin: left; transform: scaleX(1);
     }
+
+    /* ══════════════════════════════════════
+       ── وضع الأفلام: طبقة الترجمة ──
+       ══════════════════════════════════════ */
+    #sub-wrap {
+      position: fixed;
+      bottom: 72px; left: 0; right: 0;
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+      padding: 0 12px;
+      display: none; /* مخفي في وضع المسلسلات */
+    }
+    #sub-text {
+      background: rgba(0,0,0,0.82);
+      color: #fff;
+      font-size: 15px; line-height: 1.6;
+      padding: 5px 14px 7px;
+      border-radius: 6px;
+      max-width: 96%;
+      display: inline-block;
+      white-space: pre-line;
+      direction: rtl;
+    }
+    #sub-text:empty { display: none !important; }
+
+    /* ── شريط أدوات الترجمة ── */
+    #ctrl {
+      position: fixed;
+      bottom: 12px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: none; /* مخفي في وضع المسلسلات */
+      gap: 7px;
+      align-items: center;
+      transition: opacity .4s;
+    }
+    #ctrl.hidden { opacity: 0; pointer-events: none; }
+
+    .ctrl-btn {
+      background: rgba(178,7,16,0.92);
+      color: #fff; border: none; border-radius: 20px;
+      padding: 6px 14px; font-size: 13px;
+      cursor: pointer; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ctrl-btn:active { filter: brightness(.8); }
+
+    /* ── بادج الترجمة ── */
+    #sub-badge {
+      position: fixed;
+      top: 10px; right: 10px;
+      background: rgba(0,150,0,.85);
+      color: #fff; font-size: 11px;
+      padding: 3px 9px; border-radius: 14px;
+      z-index: 20; pointer-events: none;
+      display: none;
+    }
+
+    /* ── تلميح البداية ── */
+    #hint {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      background: rgba(0,0,0,.78);
+      color: #fff; padding: 16px 20px;
+      border-radius: 10px;
+      font-size: 14px; text-align: center;
+      line-height: 1.8; z-index: 30;
+      pointer-events: none;
+      transition: opacity .6s;
+      display: none;
+    }
   </style>
 </head>
 <body>
 
+  <!-- ── iframe مشترك ── -->
   <div id="frame-wrap">
     <div id="loading">
       <div class="spinner"></div>
-      <p id="loading-text">⏳ جارٍ تحميل المسلسل...</p>
+      <p id="loading-text">⏳ جارٍ تحميل المحتوى...</p>
     </div>
     <iframe
       id="tv-frame"
@@ -83,9 +163,12 @@
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
       referrerpolicy="no-referrer"
     ></iframe>
+
+    <!-- طبقة الترجمة (وضع الأفلام فقط) -->
+    <div id="sub-wrap"><span id="sub-text"></span></div>
   </div>
 
-  <!-- الزر هنا — خارج iframe بالكامل، مضمون الظهور -->
+  <!-- زر الحلقة التالية (وضع المسلسلات فقط) -->
   <div id="btn-area">
     <button id="next-btn">
       <span>⏭ الحلقة التالية</span>
@@ -93,7 +176,39 @@
     </button>
   </div>
 
+  <!-- عناصر وضع الأفلام -->
+  <div id="sub-badge">🇸🇦 ترجمة عربية</div>
+  <div id="ctrl">
+    <button class="ctrl-btn" id="btn-start">▶ بدأ الفيلم</button>
+    <button class="ctrl-btn" id="btn-minus">−2s</button>
+    <button class="ctrl-btn" id="btn-plus">+2s</button>
+    <button class="ctrl-btn" id="btn-hide">إخفاء</button>
+  </div>
+  <div id="hint">
+    🎬 ابدأ تشغيل الفيلم<br>
+    ثم اضغط <b>▶ بدأ الفيلم</b><br>
+    لمزامنة الترجمة العربية
+  </div>
+
   <script>
+  (function () {
+
+    /* ══════════════════════════════════════════
+       ── 1. معاملات URL وتحديد الوضع ──
+       ══════════════════════════════════════════ */
+    const params   = new URLSearchParams(location.search);
+    const rawSrc   = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
+    const subUrl   = params.get('sub')    ? decodeURIComponent(params.get('sub'))    : '';
+    const MODE     = subUrl ? 'movie' : 'series'; // تحديد الوضع تلقائياً
+
+    if (!rawSrc) {
+      document.getElementById('loading').innerHTML = '<p style="color:#f66">❌ رابط غير صحيح</p>';
+      return;
+    }
+
+    /* ══════════════════════════════════════════
+       ── 2. Telegram WebApp ──
+       ══════════════════════════════════════════ */
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.ready(); tg.expand();
@@ -104,168 +219,324 @@
       tg.BackButton?.hide?.();
     }
 
-    const params = new URLSearchParams(location.search);
-    const rawSrc = params.get('iframe') ? decodeURIComponent(params.get('iframe')) : '';
-
+    /* ══════════════════════════════════════════
+       ── 3. عناصر DOM المشتركة ──
+       ══════════════════════════════════════════ */
     const $loading  = document.getElementById('loading');
     const $loadingT = document.getElementById('loading-text');
     const $frame    = document.getElementById('tv-frame');
-    const $area     = document.getElementById('btn-area');
-    const $btn      = document.getElementById('next-btn');
-    const $cdBar    = document.getElementById('cd-bar');
 
-    if (!rawSrc) {
-      $loading.innerHTML = '<p style="color:#f66">❌ رابط غير صحيح</p>';
-      throw new Error('no src');
+    /* ══════════════════════════════════════════
+       ── 4. تهيئة واجهة حسب الوضع ──
+       ══════════════════════════════════════════ */
+    if (MODE === 'movie') {
+      // إظهار عناصر وضع الأفلام
+      document.getElementById('sub-wrap').style.display = 'block';
+      document.getElementById('ctrl').style.display     = 'flex';
+      document.getElementById('hint').style.display     = 'block';
+      $loadingT.textContent = '⏳ جارٍ تحميل الفيلم...';
+    } else {
+      // وضع المسلسلات: لا شيء إضافي — btn-area موجود بالفعل
+      $loadingT.textContent = '⏳ جارٍ تحميل المسلسل...';
     }
 
-    // ── State ─────────────────────────────────────────────────────
-    let currentSrc    = rawSrc;
-    let currentSeason = 1;
-    let currentEp     = 1;
-    let totalEps      = null;
-    let epDuration    = 40 * 60;  // ثواني افتراضي
-    let tmdbId        = null;
-    let imdbId        = null;
-    let isVidlink     = rawSrc.includes('vidlink.pro');
-    let showTimer     = null;
-    let autoTimer     = null;
-    let loadTime      = null;
+    /* ══════════════════════════════════════════════════════════
+       ── 5. وضع المسلسلات: الحلقة التالية + TMDB ──
+       ══════════════════════════════════════════════════════════ */
+    if (MODE === 'series') {
 
-    // ── URL helpers ───────────────────────────────────────────────
-    function parseEp(url) {
-      const vs = url.match(/[?&]season=(\d+)[&]episode=(\d+)/);
-      const vl = url.match(/\/tv\/\d+\/(\d+)\/(\d+)/);
-      if (vs) return { season: +vs[1], episode: +vs[2] };
-      if (vl) return { season: +vl[1], episode: +vl[2] };
-      return null;
+      const $area  = document.getElementById('btn-area');
+      const $btn   = document.getElementById('next-btn');
+      const $cdBar = document.getElementById('cd-bar');
+
+      let currentSrc    = rawSrc;
+      let currentSeason = 1;
+      let currentEp     = 1;
+      let totalEps      = null;
+      let epDuration    = 40 * 60;
+      let tmdbId        = null;
+      let imdbId        = null;
+      let isVidlink     = rawSrc.includes('vidlink.pro');
+      let showTimer     = null;
+      let autoTimer     = null;
+      let loadTime      = null;
+
+      /* ── URL helpers ── */
+      function parseEp(url) {
+        const vs = url.match(/[?&]season=(\d+)[&]episode=(\d+)/);
+        const vl = url.match(/\/tv\/\d+\/(\d+)\/(\d+)/);
+        if (vs) return { season: +vs[1], episode: +vs[2] };
+        if (vl) return { season: +vl[1], episode: +vl[2] };
+        return null;
+      }
+
+      function buildNext(url, s, e) {
+        if (isVidlink)
+          return url.replace(/\/tv\/(\d+)\/\d+\/\d+/, `/tv/$1/${s}/${e}`);
+        return url
+          .replace(/season=\d+/, `season=${s}`)
+          .replace(/episode=\d+/, `episode=${e}`);
+      }
+
+      /* ── TMDB ── */
+      const TMDB_KEY = '279b30c513119c7c2420ced53dc59ae2';
+
+      function fetchEpInfo(tmdb, s, e) {
+        fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${s}/episode/${e}?api_key=${TMDB_KEY}`)
+          .then(r => r.json())
+          .then(d => { if (d?.runtime > 0) epDuration = d.runtime * 60; scheduleShow(); })
+          .catch(() => scheduleShow());
+
+        fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${s}?api_key=${TMDB_KEY}`)
+          .then(r => r.json())
+          .then(d => { totalEps = d?.episodes?.length || null; })
+          .catch(() => {});
+      }
+
+      function fetchTmdbFromImdb(imdb) {
+        fetch(`https://api.themoviedb.org/3/find/${imdb}?api_key=${TMDB_KEY}&external_source=imdb_id`)
+          .then(r => r.json())
+          .then(d => {
+            const tv = d?.tv_results?.[0];
+            if (tv?.id) { tmdbId = String(tv.id); fetchEpInfo(tmdbId, currentSeason, currentEp); }
+            else scheduleShow();
+          })
+          .catch(() => scheduleShow());
+      }
+
+      /* ── إظهار/إخفاء الزر ── */
+      function scheduleShow() {
+        clearTimeout(showTimer);
+        const waitMs  = epDuration * 1000 * 0.90;
+        const elapsed = loadTime ? Date.now() - loadTime : 0;
+        const remain  = Math.max(waitMs - elapsed, 5000);
+        showTimer = setTimeout(showBtn, remain);
+      }
+
+      function showBtn() {
+        $area.classList.add('show');
+        $cdBar.style.transition = 'none';
+        $cdBar.style.transform  = 'scaleX(1)';
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          $cdBar.style.transition = 'transform 15s linear';
+          $cdBar.style.transform  = 'scaleX(0)';
+        }));
+        autoTimer = setTimeout(goNext, 15000);
+      }
+
+      function hideBtn() {
+        $area.classList.remove('show');
+        clearTimeout(autoTimer);
+        $cdBar.style.transition = 'none';
+        $cdBar.style.transform  = 'scaleX(1)';
+      }
+
+      /* ── الحلقة التالية ── */
+      function goNext() {
+        hideBtn();
+        clearTimeout(showTimer);
+        let s = currentSeason, e = currentEp + 1;
+        if (totalEps && e > totalEps) { s++; e = 1; }
+        currentSrc = buildNext(currentSrc, s, e);
+        currentSeason = s; currentEp = e;
+        epDuration = 40 * 60; totalEps = null;
+        loadFrame(currentSrc);
+        if (tmdbId)       fetchEpInfo(tmdbId, s, e);
+        else if (imdbId)  fetchTmdbFromImdb(imdbId);
+        else              scheduleShow();
+      }
+
+      $btn.addEventListener('click', goNext);
+
+      /* ── postMessage ── */
+      window.addEventListener('message', ev => {
+        const d = ev.data; if (!d) return;
+        const s = typeof d === 'string' ? d.toLowerCase() : '';
+        const o = typeof d === 'object' ? d : {};
+        if (s.includes('next') || s.includes('ended') ||
+            o.type === 'NEXT_EPISODE' || o.event === 'next' || o.event === 'ended')
+          showBtn();
+      });
+
+      /* ── تهيئة ── */
+      imdbId    = rawSrc.match(/imdb=(tt\d+)/)?.[1] || null;
+      tmdbId    = rawSrc.match(/\/tv\/(\d+)\//)?.[1] || null;
+      isVidlink = rawSrc.includes('vidlink.pro');
+
+      const ep = parseEp(rawSrc);
+      if (ep) { currentSeason = ep.season; currentEp = ep.episode; }
+
+      /* ── تحميل الإطار ── */
+      function loadFrame(url) {
+        clearTimeout(showTimer); hideBtn();
+        $loading.style.display = 'flex';
+        $loadingT.textContent  = '⏳ جارٍ تحميل الحلقة...';
+        loadTime = null;
+        $frame.src = url;
+      }
+
+      $frame.addEventListener('load', () => {
+        setTimeout(() => { $loading.style.display = 'none'; }, 400);
+        loadTime = Date.now();
+      });
+      setTimeout(() => { $loading.style.display = 'none'; }, 7000);
+
+      loadFrame(rawSrc);
+      if      (tmdbId) fetchEpInfo(tmdbId, currentSeason, currentEp);
+      else if (imdbId) fetchTmdbFromImdb(imdbId);
+      else             scheduleShow();
     }
 
-    function buildNext(url, s, e) {
-      if (isVidlink)
-        return url.replace(/\/tv\/(\d+)\/\d+\/\d+/, `/tv/$1/${s}/${e}`);
-      return url
-        .replace(/season=\d+/, `season=${s}`)
-        .replace(/episode=\d+/, `episode=${e}`);
-    }
+    /* ══════════════════════════════════════════════════════════
+       ── 6. وضع الأفلام: الترجمة والمزامنة ──
+       ══════════════════════════════════════════════════════════ */
+    if (MODE === 'movie') {
 
-    // ── TMDB ──────────────────────────────────────────────────────
-    const TMDB_KEY = '279b30c513119c7c2420ced53dc59ae2';
+      const subText   = document.getElementById('sub-text');
+      const badge     = document.getElementById('sub-badge');
+      const ctrl      = document.getElementById('ctrl');
+      const hint      = document.getElementById('hint');
+      const btnStart  = document.getElementById('btn-start');
+      const btnMinus  = document.getElementById('btn-minus');
+      const btnPlus   = document.getElementById('btn-plus');
+      const btnHide   = document.getElementById('btn-hide');
 
-    function fetchEpInfo(tmdb, s, e) {
-      fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${s}/episode/${e}?api_key=${TMDB_KEY}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d?.runtime > 0) epDuration = d.runtime * 60;
-          scheduleShow();
+      let cues           = [];
+      let offset         = 0;
+      let startedAt      = 0;
+      let running        = false;
+      let rafId          = null;
+      let autoSynced     = false;
+      let ctrlHideTimer  = null;
+
+      /* ── تحليل VTT ── */
+      function toSec(ts) {
+        const clean = ts.trim().replace(',', '.');
+        const parts = clean.split(':');
+        if (parts.length === 3)
+          return +parts[0] * 3600 + +parts[1] * 60 + +parts[2];
+        return +parts[0] * 60 + +parts[1];
+      }
+
+      function parseVTT(raw) {
+        const lines = raw.split(/\r?\n/);
+        const result = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (!lines[i].includes('-->')) continue;
+          const [startStr, endStr] = lines[i].split('-->');
+          let txt = '';
+          for (let j = i + 1; j < lines.length && lines[j].trim(); j++, i = j)
+            txt += (txt ? '\n' : '') + lines[j].trim();
+          if (txt) result.push({ s: toSec(startStr), e: toSec(endStr), t: txt });
+        }
+        return result;
+      }
+
+      function getCue(t) {
+        for (const c of cues) if (t >= c.s && t <= c.e) return c.t;
+        return '';
+      }
+
+      function render(t) {
+        const txt = getCue(t);
+        subText.textContent = txt;
+        subText.style.display = txt ? 'inline-block' : 'none';
+      }
+
+      /* ── تحميل VTT ── */
+      fetch(subUrl)
+        .then(r => r.ok ? r.text() : Promise.reject(r.status))
+        .then(raw => {
+          cues = parseVTT(raw);
+          if (cues.length) {
+            badge.style.display = 'block';
+            setTimeout(() => { hint.style.opacity = '0'; }, 2000);
+          }
         })
-        .catch(() => scheduleShow());
+        .catch(err => {
+          console.warn('VTT load failed:', err);
+          hint.textContent = '⚠️ تعذّر تحميل الترجمة\nستُجرَّب المزامنة اليدوية';
+        });
 
-      fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${s}?api_key=${TMDB_KEY}`)
-        .then(r => r.json())
-        .then(d => { totalEps = d?.episodes?.length || null; })
-        .catch(() => {});
+      /* ── حلقة RAF ── */
+      function tick() {
+        if (!running) return;
+        render((Date.now() - startedAt) / 1000 + offset);
+        rafId = requestAnimationFrame(tick);
+      }
+
+      /* ── postMessage من iframe ── */
+      window.addEventListener('message', ev => {
+        const d = ev.data; if (!d) return;
+        let t = null;
+        if (typeof d === 'object') {
+          t = d.currentTime ?? d.time ?? d.position ?? d.playbackTime
+            ?? (d.type === 'timeupdate' || d.event === 'timeupdate'
+                ? (d.currentTime ?? d.time) : null);
+        } else if (typeof d === 'string') {
+          try { const j = JSON.parse(d); t = j.currentTime ?? j.time ?? j.position; }
+          catch (_) {}
+        }
+        if (t !== null && !isNaN(+t)) {
+          autoSynced = true;
+          render(+t + offset);
+          if (running) { running = false; cancelAnimationFrame(rafId); }
+          scheduleHideCtrl();
+        }
+      });
+
+      /* ── أزرار التحكم ── */
+      btnStart.addEventListener('click', () => {
+        if (!running) {
+          running = true;
+          startedAt = Date.now() - offset * 1000;
+          btnStart.textContent = '⏸ إيقاف مؤقت';
+          hint.style.opacity = '0';
+          tick();
+        } else {
+          running = false;
+          cancelAnimationFrame(rafId);
+          offset = (Date.now() - startedAt) / 1000;
+          btnStart.textContent = '▶ استئناف';
+        }
+      });
+
+      btnMinus.addEventListener('click', () => {
+        offset -= 2;
+        if (running) startedAt = Date.now() - offset * 1000;
+        else render(offset);
+      });
+
+      btnPlus.addEventListener('click', () => {
+        offset += 2;
+        if (running) startedAt = Date.now() - offset * 1000;
+        else render(offset);
+      });
+
+      btnHide.addEventListener('click', () => ctrl.classList.add('hidden'));
+
+      /* ── إظهار الأزرار عند اللمس ── */
+      document.addEventListener('touchstart', () => {
+        ctrl.classList.remove('hidden');
+        scheduleHideCtrl();
+      }, { passive: true });
+
+      function scheduleHideCtrl() {
+        clearTimeout(ctrlHideTimer);
+        ctrlHideTimer = setTimeout(() => {
+          if (autoSynced) ctrl.classList.add('hidden');
+        }, 5000);
+      }
+
+      /* ── تحميل iframe مباشرة ── */
+      $frame.src = rawSrc;
+      $frame.addEventListener('load', () => {
+        setTimeout(() => { $loading.style.display = 'none'; }, 400);
+      });
+      setTimeout(() => { $loading.style.display = 'none'; }, 7000);
     }
 
-    function fetchTmdbFromImdb(imdb) {
-      fetch(`https://api.themoviedb.org/3/find/${imdb}?api_key=${TMDB_KEY}&external_source=imdb_id`)
-        .then(r => r.json())
-        .then(d => {
-          const tv = d?.tv_results?.[0];
-          if (tv?.id) {
-            tmdbId = String(tv.id);
-            fetchEpInfo(tmdbId, currentSeason, currentEp);
-          } else scheduleShow();
-        })
-        .catch(() => scheduleShow());
-    }
-
-    // ── Show / Hide زر ────────────────────────────────────────────
-    function scheduleShow() {
-      clearTimeout(showTimer);
-      const waitMs  = epDuration * 1000 * 0.90;
-      const elapsed = loadTime ? Date.now() - loadTime : 0;
-      const remain  = Math.max(waitMs - elapsed, 5000); // 5 ثواني حد أدنى للاختبار
-      showTimer = setTimeout(showBtn, remain);
-    }
-
-    function showBtn() {
-      $area.classList.add('show');
-      // countdown 15 ثانية
-      $cdBar.style.transition = 'none';
-      $cdBar.style.transform  = 'scaleX(1)';
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        $cdBar.style.transition = 'transform 15s linear';
-        $cdBar.style.transform  = 'scaleX(0)';
-      }));
-      autoTimer = setTimeout(goNext, 15000);
-    }
-
-    function hideBtn() {
-      $area.classList.remove('show');
-      clearTimeout(autoTimer);
-      $cdBar.style.transition = 'none';
-      $cdBar.style.transform  = 'scaleX(1)';
-    }
-
-    // ── Next episode ──────────────────────────────────────────────
-    function goNext() {
-      hideBtn();
-      clearTimeout(showTimer);
-
-      let s = currentSeason, e = currentEp + 1;
-      if (totalEps && e > totalEps) { s++; e = 1; }
-
-      currentSrc    = buildNext(currentSrc, s, e);
-      currentSeason = s; currentEp = e;
-      epDuration    = 40 * 60; totalEps = null;
-
-      loadFrame(currentSrc);
-      if (tmdbId)       fetchEpInfo(tmdbId, s, e);
-      else if (imdbId)  fetchTmdbFromImdb(imdbId);
-      else              scheduleShow();
-    }
-
-    $btn.addEventListener('click', goNext);
-
-    // ── postMessage ───────────────────────────────────────────────
-    window.addEventListener('message', ev => {
-      const d = ev.data; if (!d) return;
-      const s = typeof d === 'string' ? d.toLowerCase() : '';
-      const o = typeof d === 'object' ? d : {};
-      if (s.includes('next') || s.includes('ended') ||
-          o.type === 'NEXT_EPISODE' || o.event === 'next' || o.event === 'ended')
-        showBtn();
-    });
-
-    // ── Load frame ────────────────────────────────────────────────
-    function loadFrame(url) {
-      clearTimeout(showTimer); hideBtn();
-      $loading.style.display = 'flex';
-      $loadingT.textContent  = '⏳ جارٍ تحميل الحلقة...';
-      loadTime = null;
-      $frame.src = url;
-    }
-
-    $frame.addEventListener('load', () => {
-      setTimeout(() => { $loading.style.display = 'none'; }, 400);
-      loadTime = Date.now();
-    });
-    setTimeout(() => { $loading.style.display = 'none'; }, 7000);
-
-    // ── Init ─────────────────────────────────────────────────────
-    imdbId    = rawSrc.match(/imdb=(tt\d+)/)?.[1]  || null;
-    tmdbId    = rawSrc.match(/\/tv\/(\d+)\//)?.[1]  || null;
-    isVidlink = rawSrc.includes('vidlink.pro');
-
-    const ep = parseEp(rawSrc);
-    if (ep) { currentSeason = ep.season; currentEp = ep.episode; }
-
-    loadFrame(rawSrc);
-
-    if      (tmdbId) fetchEpInfo(tmdbId, currentSeason, currentEp);
-    else if (imdbId) fetchTmdbFromImdb(imdbId);
-    else             scheduleShow();
+  })();
   </script>
 </body>
 </html>
